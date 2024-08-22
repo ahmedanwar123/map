@@ -43,7 +43,7 @@ pygame.display.set_caption("Minefield Map")
 
 # Define the initial map (0 for empty space, 1 for surface mine, 2 for buried mine)
 map_data = [[0] * MAP_WIDTH for _ in range(MAP_HEIGHT)]
-first_detection = True
+first_detection: bool = True
 
 # Load images
 empty_img = pygame.Surface((TILE_SIZE, TILE_SIZE))
@@ -68,19 +68,19 @@ SELECTED_COLOR = (255, 154, 162)
 TEXT_COLOR = (255, 255, 255)
 
 # Orientation directions (relative to the corner cells)
-orientations = {
+ORIENTATIONS = {
     "Bottom-left": [0, 90],
     "Bottom-right": [90, 180],
     "Top-left": [0, -90],
     "Top-right": [-90, 180],
 }
 
-orientation_offset = None
-pose_x_offset = None
-pose_y_offset = None
+orientation_offset: "float | None" = None
+pose_x_offset: "float | None" = None
+pose_y_offset: "float | None" = None
 
 # Corner and orientation positions (in grid coordinates)
-corner_positions = {
+CORNER_POSITIONS = {
     "Bottom-left": (0, 0),
     "Bottom-right": (MAP_WIDTH - 1, 0),
     "Top-left": (0, MAP_HEIGHT - 1),
@@ -88,7 +88,7 @@ corner_positions = {
 }
 
 # Orientation cells relative to corner positions (adjacent cells)
-orientation_offsets = {
+ORIENTATION_OFFSETS = {
     "Bottom-left": [(1, 0), (0, 1)],  # Right and above
     "Bottom-right": [(0, 1), (-1, 0)],  # Left and above
     "Top-left": [(1, 0), (0, -1)],  # Right and below
@@ -97,18 +97,23 @@ orientation_offsets = {
 
 # Robot's current position and orientation
 robot_x, robot_y, robot_theta = 0, 0, 0  # Initialize with default values
-camera_detected = None  #
-metal_detected = None  #
+camera_detected: "bool | None" = None
+metal_detected: "bool | None" = None
 
 
 # Active corner and orientation
 active_corner = None
 active_orientation = None
-selection_complete = False  # New variable to track if selection is complete
+selection_complete: bool = False  # New variable to track if selection is complete
+
+
+# Create the table surfaces
+surface_table_surface = pygame.Surface((TABLE_WIDTH, TABLE_HEIGHT))
+buried_table_surface = pygame.Surface((TABLE_WIDTH, TABLE_HEIGHT))
 
 
 # Function to calculate mine position based on robot's position and orientation
-def calculate_mine_position(rel_x, rel_y, theta):
+def calculate_mine_position(rel_x: int, rel_y: int, theta: float) -> "tuple[int, int]":
     theta_rad = math.radians(theta)
 
     # Calculate absolute mine position based on robot's position and orientation
@@ -123,42 +128,41 @@ def calculate_mine_position(rel_x, rel_y, theta):
 
 
 # ROS callback for robot position and orientation
-def robot_pose_callback(data):
+def robot_pose_callback(data: Pose2D) -> None:
     global robot_x, robot_y, robot_theta
     try:
-        if orientation_offset != None:
+        if orientation_offset is not None:
             robot_theta = (
                 data.theta + orientation_offset
             )  # The theta value is already in radians
-            if (pose_x_offset, pose_y_offset) == corner_positions["Bottom-left"]:
+            if (pose_x_offset, pose_y_offset) == CORNER_POSITIONS["Bottom-left"]:
                 if orientation_offset == 0:
                     robot_x = data.x
                     robot_y = data.y
                 elif orientation_offset == 90:
                     robot_x = data.y
                     robot_y = data.x
-            elif (pose_x_offset, pose_y_offset) == corner_positions["Bottom-right"]:
+            elif (pose_x_offset, pose_y_offset) == CORNER_POSITIONS["Bottom-right"]:
                 if orientation_offset == 90:
                     robot_x = MAP_WIDTH - data.y - 1
                     robot_y = data.x
                 elif orientation_offset == 180:
                     robot_x = MAP_WIDTH - data.x - 1
                     robot_y = data.y
-            elif (pose_x_offset, pose_y_offset) == corner_positions["Top-left"]:
+            elif (pose_x_offset, pose_y_offset) == CORNER_POSITIONS["Top-left"]:
                 if orientation_offset == 0:
                     robot_x = data.x
                     robot_y = MAP_HEIGHT - data.y - 1
                 elif orientation_offset == -90:
                     robot_x = data.y
                     robot_y = MAP_HEIGHT - data.x - 1
-            elif (pose_x_offset, pose_y_offset) == corner_positions["Top-right"]:
+            elif (pose_x_offset, pose_y_offset) == CORNER_POSITIONS["Top-right"]:
                 if orientation_offset == 180:
                     robot_x = MAP_WIDTH - data.x - 1
                     robot_y = MAP_HEIGHT - data.y - 1
                 elif orientation_offset == -90:
                     robot_x = MAP_HEIGHT - data.y - 1
                     robot_y = MAP_HEIGHT - data.x - 1
-
             else:
                 rospy.loginfo("orientation_offset is not received")
 
@@ -170,7 +174,7 @@ def robot_pose_callback(data):
 
 
 # ROS callback for camera detection (Bool)
-def camera_detection_callback(data):
+def camera_detection_callback(data: Bool) -> None:
     global camera_detected
     camera_detected = data.data  # True if a mine is detected by the camera
     rospy.loginfo(
@@ -179,38 +183,26 @@ def camera_detection_callback(data):
 
 
 # ROS callback for metal detector detection (Bool)
-def metal_detector_callback(data):
+def metal_detector_callback(data: Bool) -> None:
     global metal_detected
     metal_detected = data.data  # True if a metal mine is detected, False otherwise
     rospy.loginfo(
-        f"Metal detector detection: {'Mine detected' if metal_detected == True else 'No mine detected'}"
+        f"Metal detector detection: {'Mine detected' if metal_detected is True else 'No mine detected'}"
     )
 
 
-def mine_detection_callback():
-    global camera_detected, metal_detected, first_detection
+def mine_detection_callback() -> None:
+    global camera_detected, metal_detected, first_detection, map_data
 
     if not selection_complete:
         rospy.loginfo("Selection of corner and orientation not complete.")
         return
 
-    global map_data
-    mine_type = None
-
-    # Check if either the camera or the metal detector detects a mine
-    # if camera_detected or metal_detected == 1:
-    #     mine_type = "surface" if camera_detected else "buried"
-    # else:
-    #     mine_type = "no mine"
-    if metal_detected == True:
-        if camera_detected == True:
-            mine_type = "surface"
-        elif camera_detected == False:
-            mine_type = "buried"
+    if metal_detected:
+        mine_type = "surface" if camera_detected else "buried"
     else:
         mine_type = "no mine"
-    # metal_detected = False
-    # camera_detected = False
+
     if first_detection:
         # Handle the glitch for the first detection by writing "no mine"
         rel_x, rel_y = 1, 0  # Assume the glitch happens 1 unit in front
@@ -239,7 +231,7 @@ def mine_detection_callback():
         rospy.loginfo("No mine detected.")
 
 
-def draw_map(screen):
+def draw_map(screen: pygame.Surface) -> None:
     for y, row in enumerate(map_data):
         for x, tile in enumerate(row):
             if tile == 1:
@@ -302,7 +294,7 @@ def draw_map(screen):
 # Function to draw the corner and orientation cells
 
 
-def draw_corner_orientation_cells(screen):
+def draw_corner_orientation_cells(screen: pygame.Surface) -> None:
     global active_corner, active_orientation, selection_complete
 
     if selection_complete:
@@ -310,7 +302,7 @@ def draw_corner_orientation_cells(screen):
 
     if active_corner:
         # Draw only the active corner cell
-        corner_x, corner_y = corner_positions[active_corner]
+        corner_x, corner_y = CORNER_POSITIONS[active_corner]
         pygame.draw.rect(
             screen,
             SELECTED_COLOR,
@@ -323,7 +315,7 @@ def draw_corner_orientation_cells(screen):
         )
 
         # Draw the adjacent cells for orientation
-        for i, (ox, oy) in enumerate(orientation_offsets[active_corner]):
+        for i, (ox, oy) in enumerate(ORIENTATION_OFFSETS[active_corner]):
             orientation_x = corner_x + ox
             orientation_y = corner_y + oy
             if 0 <= orientation_x < MAP_WIDTH and 0 <= orientation_y < MAP_HEIGHT:
@@ -343,10 +335,10 @@ def draw_corner_orientation_cells(screen):
                     ),
                 )
 
-    # When a corner and orientation are selected, do not draw any corners or orientations
+    # When a corner and orientation are selected, do not draw any corners or ORIENTATIONS
     elif not active_corner:
         # Draw all corners initially
-        for corner, (cx, cy) in corner_positions.items():
+        for corner, (cx, cy) in CORNER_POSITIONS.items():
             pygame.draw.rect(
                 screen,
                 CORNER_COLOR,
@@ -359,8 +351,8 @@ def draw_corner_orientation_cells(screen):
             )
 
         # Draw orientation cells around all corners
-        for corner, (cx, cy) in corner_positions.items():
-            for i, (ox, oy) in enumerate(orientation_offsets[corner]):
+        for corner, (cx, cy) in CORNER_POSITIONS.items():
+            for i, (ox, oy) in enumerate(ORIENTATION_OFFSETS[corner]):
                 orientation_x = cx + ox
                 orientation_y = cy + oy
                 if 0 <= orientation_x < MAP_WIDTH and 0 <= orientation_y < MAP_HEIGHT:
@@ -377,7 +369,7 @@ def draw_corner_orientation_cells(screen):
 
 
 # Function to handle mouse click events
-def handle_mouse_click(pos):
+def handle_mouse_click(pos: "tuple[int, int]") -> None:
     global \
         robot_x, \
         robot_y, \
@@ -397,32 +389,32 @@ def handle_mouse_click(pos):
     grid_y = MAP_HEIGHT - 1 - mouse_y // TILE_SIZE
 
     # Check if the click is on a corner cell
-    for corner, (cx, cy) in corner_positions.items():
-        if grid_x == cx and grid_y == cy:
-            if (
-                active_corner is None
-            ):  # Allow selecting a corner only if none is selected
-                active_corner = corner
-                pose_x_offset, pose_y_offset = cx, cy
-                active_orientation = None  # Reset active orientation
-                print(f"Selected corner: {corner}")
-                return
+    for corner, (cx, cy) in CORNER_POSITIONS.items():
+        if grid_x == cx and grid_y == cy and active_corner is None:
+            active_corner = corner
+            pose_x_offset, pose_y_offset = cx, cy
+            active_orientation = None  # Reset active orientation
+            print(f"Selected corner: {corner}")
+            return
 
     # Check if the click is on an orientation cell
     if active_corner:
-        for i, (ox, oy) in enumerate(orientation_offsets[active_corner]):
-            orientation_x = corner_positions[active_corner][0] + ox
-            orientation_y = corner_positions[active_corner][1] + oy
+        for i, (ox, oy) in enumerate(ORIENTATION_OFFSETS[active_corner]):
+            orientation_x = CORNER_POSITIONS[active_corner][0] + ox
+            orientation_y = CORNER_POSITIONS[active_corner][1] + oy
             if grid_x == orientation_x and grid_y == orientation_y:
                 active_orientation = (active_corner, i)
-                orientation_offset = orientations[active_corner][i]
+                orientation_offset = ORIENTATIONS[active_corner][i]
                 print(f"Selected orientation: {robot_theta} radians")
                 selection_complete = True  # Mark selection as complete
                 return
 
 
 # Function to draw the tables for surface and buried mines
-def draw_tables(screen, surface_table, buried_table_surface):
+def draw_tables(
+    surface_table: pygame.Surface,
+    buried_table_surface: pygame.Surface,
+) -> None:
     surface_table.fill((255, 255, 255))  # White background
     buried_table_surface.fill((255, 255, 255))  # White background
     pygame.draw.rect(
@@ -458,17 +450,12 @@ def draw_tables(screen, surface_table, buried_table_surface):
                     return
 
 
-# Create the table surfaces
-surface_table_surface = pygame.Surface((TABLE_WIDTH, TABLE_HEIGHT))
-buried_table_surface = pygame.Surface((TABLE_WIDTH, TABLE_HEIGHT))
-
-
 # Function to save the map as a screenshot
-def save_map_screenshot(directory="/home/ahmed/Map_Screenshots"):
+def save_map_screenshot(
+    directory: str = "/home/ahmed/Map_Screenshots",
+) -> None:
     try:
-        # Create directory if it doesn't exist
-        if not os.path.exists(directory):
-            os.makedirs(directory)
+        os.makedirs(directory, exist_ok=True)
 
         # Generate a unique filename with a timestamp
         timestamp = time.strftime("%Y%m%d-%H%M%S")
@@ -482,15 +469,7 @@ def save_map_screenshot(directory="/home/ahmed/Map_Screenshots"):
         rospy.logerr(f"Failed to save map screenshot: {e}")
 
 
-def main():
-    global \
-        robot_x, \
-        robot_y, \
-        robot_theta, \
-        active_corner, \
-        active_orientation, \
-        selection_complete
-
+def main() -> int:
     # Initialize ROS node
     rospy.init_node("minefield_map", anonymous=False)
     rospy.Subscriber("pose_combined", Pose2D, robot_pose_callback)
@@ -517,7 +496,7 @@ def main():
         draw_corner_orientation_cells(screen)
 
         # Draw the tables
-        draw_tables(screen, surface_table_surface, buried_table_surface)
+        draw_tables(surface_table_surface, buried_table_surface)
         screen.blit(surface_table_surface, (MAP_WIDTH * TILE_SIZE + TABLE_SPACING, 0))
         screen.blit(
             buried_table_surface,
@@ -528,7 +507,8 @@ def main():
         rate.sleep()
     save_map_screenshot()
     pygame.quit()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
