@@ -21,79 +21,23 @@ import rospy
 from geometry_msgs.msg import Pose2D
 from std_msgs.msg import Bool
 import math
+import const
+from const import MINE_TYPE
 
 # Initialize Pygame
 pygame.init()
-
-# Constants
-TILE_SIZE = 70  # Size of each tile in pixels
-MAP_WIDTH = 10  # Width of the map in tiles
-MAP_HEIGHT = 10  # Height of the map in tiles
-FONT_SIZE = 30
-TABLE_WIDTH = 250
-TABLE_HEIGHT = MAP_HEIGHT * TILE_SIZE
-TABLE_PADDING = 10
-TABLE_SPACING = 10  # Space between the two tables
-
-# Create the display
-screen = pygame.display.set_mode(
-    (MAP_WIDTH * TILE_SIZE + 2 * (TABLE_WIDTH + TABLE_SPACING), MAP_HEIGHT * TILE_SIZE)
-)
 pygame.display.set_caption("Minefield Map")
 
-# Define the initial map (0 for empty space, 1 for surface mine, 2 for buried mine)
-map_data = [[0] * MAP_WIDTH for _ in range(MAP_HEIGHT)]
-first_detection: bool = True
-
-# Load images
-empty_img = pygame.Surface((TILE_SIZE, TILE_SIZE))
-empty_img.fill((255, 255, 255))  # White for empty space
-surface_mine_img = pygame.Surface((TILE_SIZE, TILE_SIZE))
-surface_mine_img.fill((0, 255, 255))  # Cyan for surface mines
-buried_mine_img = pygame.Surface((TILE_SIZE, TILE_SIZE))
-buried_mine_img.fill((0, 128, 128))  # Teal for buried mines
-robot_img = pygame.image.load("/home/ahmed/catkin_ws/src/map/src/robot.png")
-robot_img = pygame.transform.scale(robot_img, (TILE_SIZE, TILE_SIZE))
-
-
 # Set up font
-font = pygame.font.Font(None, FONT_SIZE)
-
-# Button settings
-BUTTON_WIDTH = 60
-BUTTON_HEIGHT = 30
-CORNER_COLOR = (255, 183, 178)
-ORIENTATION_COLOR = (255, 218, 193)
-SELECTED_COLOR = (255, 154, 162)
-TEXT_COLOR = (255, 255, 255)
-
-# Orientation directions (relative to the corner cells)
-ORIENTATIONS = {
-    "Bottom-left": [0, 90],
-    "Bottom-right": [90, 180],
-    "Top-left": [0, -90],
-    "Top-right": [-90, 180],
-}
+FONT = pygame.font.Font(None, const.FONT_SIZE)
 
 orientation_offset: "float | None" = None
 pose_x_offset: "float | None" = None
 pose_y_offset: "float | None" = None
 
-# Corner and orientation positions (in grid coordinates)
-CORNER_POSITIONS = {
-    "Bottom-left": (0, 0),
-    "Bottom-right": (MAP_WIDTH - 1, 0),
-    "Top-left": (0, MAP_HEIGHT - 1),
-    "Top-right": (MAP_WIDTH - 1, MAP_HEIGHT - 1),
-}
-
-# Orientation cells relative to corner positions (adjacent cells)
-ORIENTATION_OFFSETS = {
-    "Bottom-left": [(1, 0), (0, 1)],  # Right and above
-    "Bottom-right": [(0, 1), (-1, 0)],  # Left and above
-    "Top-left": [(1, 0), (0, -1)],  # Right and below
-    "Top-right": [(0, -1), (-1, 0)],  # Left and below
-}
+# Define the initial map (0 for empty space, 1 for surface mine, 2 for buried mine)
+map_data = [[MINE_TYPE.NO_MINE] * const.MAP_WIDTH for _ in range(const.MAP_HEIGHT)]
+first_detection: bool = True
 
 # Robot's current position and orientation
 robot_x, robot_y, robot_theta = 0, 0, 0  # Initialize with default values
@@ -105,11 +49,6 @@ metal_detected: "bool | None" = None
 active_corner = None
 active_orientation = None
 selection_complete: bool = False  # New variable to track if selection is complete
-
-
-# Create the table surfaces
-surface_table_surface = pygame.Surface((TABLE_WIDTH, TABLE_HEIGHT))
-buried_table_surface = pygame.Surface((TABLE_WIDTH, TABLE_HEIGHT))
 
 
 # Function to calculate mine position based on robot's position and orientation
@@ -135,34 +74,36 @@ def robot_pose_callback(data: Pose2D) -> None:
             robot_theta = (
                 data.theta + orientation_offset
             )  # The theta value is already in radians
-            if (pose_x_offset, pose_y_offset) == CORNER_POSITIONS["Bottom-left"]:
+            if (pose_x_offset, pose_y_offset) == const.CORNER_POSITIONS["Bottom-left"]:
                 if orientation_offset == 0:
                     robot_x = data.x
                     robot_y = data.y
                 elif orientation_offset == 90:
                     robot_x = data.y
                     robot_y = data.x
-            elif (pose_x_offset, pose_y_offset) == CORNER_POSITIONS["Bottom-right"]:
+            elif (pose_x_offset, pose_y_offset) == const.CORNER_POSITIONS[
+                "Bottom-right"
+            ]:
                 if orientation_offset == 90:
-                    robot_x = MAP_WIDTH - data.y - 1
+                    robot_x = const.MAP_WIDTH - data.y - 1
                     robot_y = data.x
                 elif orientation_offset == 180:
-                    robot_x = MAP_WIDTH - data.x - 1
+                    robot_x = const.MAP_WIDTH - data.x - 1
                     robot_y = data.y
-            elif (pose_x_offset, pose_y_offset) == CORNER_POSITIONS["Top-left"]:
+            elif (pose_x_offset, pose_y_offset) == const.CORNER_POSITIONS["Top-left"]:
                 if orientation_offset == 0:
                     robot_x = data.x
-                    robot_y = MAP_HEIGHT - data.y - 1
+                    robot_y = const.MAP_HEIGHT - data.y - 1
                 elif orientation_offset == -90:
                     robot_x = data.y
-                    robot_y = MAP_HEIGHT - data.x - 1
-            elif (pose_x_offset, pose_y_offset) == CORNER_POSITIONS["Top-right"]:
+                    robot_y = const.MAP_HEIGHT - data.x - 1
+            elif (pose_x_offset, pose_y_offset) == const.CORNER_POSITIONS["Top-right"]:
                 if orientation_offset == 180:
-                    robot_x = MAP_WIDTH - data.x - 1
-                    robot_y = MAP_HEIGHT - data.y - 1
+                    robot_x = const.MAP_WIDTH - data.x - 1
+                    robot_y = const.MAP_HEIGHT - data.y - 1
                 elif orientation_offset == -90:
-                    robot_x = MAP_HEIGHT - data.y - 1
-                    robot_y = MAP_HEIGHT - data.x - 1
+                    robot_x = const.MAP_HEIGHT - data.y - 1
+                    robot_y = const.MAP_HEIGHT - data.x - 1
             else:
                 rospy.loginfo("orientation_offset is not received")
 
@@ -208,8 +149,8 @@ def mine_detection_callback() -> None:
         rel_x, rel_y = 1, 0  # Assume the glitch happens 1 unit in front
         glitch_x, glitch_y = calculate_mine_position(rel_x, rel_y, robot_theta)
 
-        if 0 <= glitch_x < MAP_WIDTH and 0 <= glitch_y < MAP_HEIGHT:
-            map_data[glitch_y][glitch_x] = 0  # Write "no mine"
+        if 0 <= glitch_x < const.MAP_WIDTH and 0 <= glitch_y < const.MAP_HEIGHT:
+            map_data[glitch_y][glitch_x] = MINE_TYPE.NO_MINE
 
         first_detection = False  # Disable the glitch after it occurs once
         rospy.loginfo("Handled the first detection glitch.")
@@ -220,11 +161,11 @@ def mine_detection_callback() -> None:
         rel_x, rel_y = 1, 0  # Relative position of the mine (1 unit in front)
         mine_x, mine_y = calculate_mine_position(rel_x, rel_y, robot_theta)
 
-        if 0 <= mine_x < MAP_WIDTH and 0 <= mine_y < MAP_HEIGHT:
+        if 0 <= mine_x < const.MAP_WIDTH and 0 <= mine_y < const.MAP_HEIGHT:
             if mine_type == "surface":
-                map_data[mine_y][mine_x] = 1
+                map_data[mine_y][mine_x] = MINE_TYPE.SURFACE
             elif mine_type == "buried":
-                map_data[mine_y][mine_x] = 2
+                map_data[mine_y][mine_x] = MINE_TYPE.BURIED
         else:
             rospy.logwarn(f"Mine position out of bounds: ({mine_x}, {mine_y})")
     else:
@@ -234,36 +175,48 @@ def mine_detection_callback() -> None:
 def draw_map(screen: pygame.Surface) -> None:
     for y, row in enumerate(map_data):
         for x, tile in enumerate(row):
-            if tile == 1:
+            if tile == MINE_TYPE.SURFACE:
                 screen.blit(
-                    surface_mine_img, (x * TILE_SIZE, (MAP_HEIGHT - y - 1) * TILE_SIZE)
+                    const.SURFACE_MINE_IMG,
+                    (x * const.TILE_SIZE, (const.MAP_HEIGHT - y - 1) * const.TILE_SIZE),
                 )
-            elif tile == 2:
+            elif tile == MINE_TYPE.BURIED:
                 screen.blit(
-                    buried_mine_img, (x * TILE_SIZE, (MAP_HEIGHT - y - 1) * TILE_SIZE)
+                    const.BURIED_MINE_IMG,
+                    (x * const.TILE_SIZE, (const.MAP_HEIGHT - y - 1) * const.TILE_SIZE),
                 )
             else:
                 screen.blit(
-                    empty_img, (x * TILE_SIZE, (MAP_HEIGHT - y - 1) * TILE_SIZE)
+                    const.EMPTY_IMG,
+                    (x * const.TILE_SIZE, (const.MAP_HEIGHT - y - 1) * const.TILE_SIZE),
                 )
             pygame.draw.rect(
                 screen,
                 (0, 0, 0),
-                (x * TILE_SIZE, (MAP_HEIGHT - y - 1) * TILE_SIZE, TILE_SIZE, TILE_SIZE),
+                (
+                    x * const.TILE_SIZE,
+                    (const.MAP_HEIGHT - y - 1) * const.TILE_SIZE,
+                    const.TILE_SIZE,
+                    const.TILE_SIZE,
+                ),
                 1,
             )
-            coord_text = font.render(f"{chr(65 + x)},{y + 1}", True, (0, 0, 0))
+            coord_text = FONT.render(f"{chr(65 + x)},{y + 1}", True, (0, 0, 0))
             screen.blit(
-                coord_text, (x * TILE_SIZE + 2, (MAP_HEIGHT - y - 1) * TILE_SIZE + 2)
+                coord_text,
+                (
+                    x * const.TILE_SIZE + 2,
+                    (const.MAP_HEIGHT - y - 1) * const.TILE_SIZE + 2,
+                ),
             )
     # Calculate robot image position
-    robot_screen_x = int(robot_x * TILE_SIZE)
+    robot_screen_x = int(robot_x * const.TILE_SIZE)
     robot_screen_y = int(
-        (MAP_HEIGHT - robot_y - 1) * TILE_SIZE
+        (const.MAP_HEIGHT - robot_y - 1) * const.TILE_SIZE
     )  # Convert map coordinates to screen coordinates
 
     # Draw the robot image
-    screen.blit(robot_img, (robot_screen_x, robot_screen_y))
+    screen.blit(const.ROBOT_IMG, (robot_screen_x, robot_screen_y))
 
     # Draw the blue circle for the robot
     # robot_screen_x = int(robot_x * TILE_SIZE)
@@ -271,21 +224,21 @@ def draw_map(screen: pygame.Surface) -> None:
     # pygame.draw.circle(screen, (0, 0, 255), (robot_screen_x + TILE_SIZE // 2, robot_screen_y + TILE_SIZE // 2), TILE_SIZE // 4)  # Blue circle with radius half of TILE_SIZE
 
     # Draw the arrow to indicate the robot's orientation
-    arrow_length = (TILE_SIZE // 2) + 20
+    arrow_length = (const.TILE_SIZE // 2) + 20
     arrow_x = (
         robot_screen_x
-        + TILE_SIZE // 2
+        + const.TILE_SIZE // 2
         + arrow_length * math.cos(math.radians(robot_theta))
     )
     arrow_y = (
         robot_screen_y
-        + TILE_SIZE // 2
+        + const.TILE_SIZE // 2
         - arrow_length * math.sin(math.radians(robot_theta))
     )
     pygame.draw.line(
         screen,
         (255, 0, 0),
-        (robot_screen_x + TILE_SIZE // 2, robot_screen_y + TILE_SIZE // 2),
+        (robot_screen_x + const.TILE_SIZE // 2, robot_screen_y + const.TILE_SIZE // 2),
         (arrow_x, arrow_y),
         12,
     )
@@ -302,68 +255,74 @@ def draw_corner_orientation_cells(screen: pygame.Surface) -> None:
 
     if active_corner:
         # Draw only the active corner cell
-        corner_x, corner_y = CORNER_POSITIONS[active_corner]
+        corner_x, corner_y = const.CORNER_POSITIONS[active_corner]
         pygame.draw.rect(
             screen,
-            SELECTED_COLOR,
+            const.SELECTED_COLOR,
             (
-                corner_x * TILE_SIZE,
-                (MAP_HEIGHT - corner_y - 1) * TILE_SIZE,
-                TILE_SIZE,
-                TILE_SIZE,
+                corner_x * const.TILE_SIZE,
+                (const.MAP_HEIGHT - corner_y - 1) * const.TILE_SIZE,
+                const.TILE_SIZE,
+                const.TILE_SIZE,
             ),
         )
 
         # Draw the adjacent cells for orientation
-        for i, (ox, oy) in enumerate(ORIENTATION_OFFSETS[active_corner]):
+        for i, (ox, oy) in enumerate(const.ORIENTATION_OFFSETS[active_corner]):
             orientation_x = corner_x + ox
             orientation_y = corner_y + oy
-            if 0 <= orientation_x < MAP_WIDTH and 0 <= orientation_y < MAP_HEIGHT:
+            if (
+                0 <= orientation_x < const.MAP_WIDTH
+                and 0 <= orientation_y < const.MAP_HEIGHT
+            ):
                 color = (
-                    SELECTED_COLOR
+                    const.SELECTED_COLOR
                     if active_orientation == (active_corner, i)
-                    else ORIENTATION_COLOR
+                    else const.ORIENTATION_COLOR
                 )
                 pygame.draw.rect(
                     screen,
                     color,
                     (
-                        orientation_x * TILE_SIZE,
-                        (MAP_HEIGHT - orientation_y - 1) * TILE_SIZE,
-                        TILE_SIZE,
-                        TILE_SIZE,
+                        orientation_x * const.TILE_SIZE,
+                        (const.MAP_HEIGHT - orientation_y - 1) * const.TILE_SIZE,
+                        const.TILE_SIZE,
+                        const.TILE_SIZE,
                     ),
                 )
 
     # When a corner and orientation are selected, do not draw any corners or ORIENTATIONS
     elif not active_corner:
         # Draw all corners initially
-        for corner, (cx, cy) in CORNER_POSITIONS.items():
+        for corner, (cx, cy) in const.CORNER_POSITIONS.items():
             pygame.draw.rect(
                 screen,
-                CORNER_COLOR,
+                const.CORNER_COLOR,
                 (
-                    cx * TILE_SIZE,
-                    (MAP_HEIGHT - cy - 1) * TILE_SIZE,
-                    TILE_SIZE,
-                    TILE_SIZE,
+                    cx * const.TILE_SIZE,
+                    (const.MAP_HEIGHT - cy - 1) * const.TILE_SIZE,
+                    const.TILE_SIZE,
+                    const.TILE_SIZE,
                 ),
             )
 
         # Draw orientation cells around all corners
-        for corner, (cx, cy) in CORNER_POSITIONS.items():
-            for i, (ox, oy) in enumerate(ORIENTATION_OFFSETS[corner]):
+        for corner, (cx, cy) in const.CORNER_POSITIONS.items():
+            for i, (ox, oy) in enumerate(const.ORIENTATION_OFFSETS[corner]):
                 orientation_x = cx + ox
                 orientation_y = cy + oy
-                if 0 <= orientation_x < MAP_WIDTH and 0 <= orientation_y < MAP_HEIGHT:
+                if (
+                    0 <= orientation_x < const.MAP_WIDTH
+                    and 0 <= orientation_y < const.MAP_HEIGHT
+                ):
                     pygame.draw.rect(
                         screen,
-                        ORIENTATION_COLOR,
+                        const.ORIENTATION_COLOR,
                         (
-                            orientation_x * TILE_SIZE,
-                            (MAP_HEIGHT - orientation_y - 1) * TILE_SIZE,
-                            TILE_SIZE,
-                            TILE_SIZE,
+                            orientation_x * const.TILE_SIZE,
+                            (const.MAP_HEIGHT - orientation_y - 1) * const.TILE_SIZE,
+                            const.TILE_SIZE,
+                            const.TILE_SIZE,
                         ),
                     )
 
@@ -385,11 +344,11 @@ def handle_mouse_click(pos: "tuple[int, int]") -> None:
         return  # Ignore clicks if selection is complete
 
     mouse_x, mouse_y = pos
-    grid_x = mouse_x // TILE_SIZE
-    grid_y = MAP_HEIGHT - 1 - mouse_y // TILE_SIZE
+    grid_x = mouse_x // const.TILE_SIZE
+    grid_y = const.MAP_HEIGHT - 1 - mouse_y // const.TILE_SIZE
 
     # Check if the click is on a corner cell
-    for corner, (cx, cy) in CORNER_POSITIONS.items():
+    for corner, (cx, cy) in const.CORNER_POSITIONS.items():
         if grid_x == cx and grid_y == cy and active_corner is None:
             active_corner = corner
             pose_x_offset, pose_y_offset = cx, cy
@@ -399,12 +358,12 @@ def handle_mouse_click(pos: "tuple[int, int]") -> None:
 
     # Check if the click is on an orientation cell
     if active_corner:
-        for i, (ox, oy) in enumerate(ORIENTATION_OFFSETS[active_corner]):
-            orientation_x = CORNER_POSITIONS[active_corner][0] + ox
-            orientation_y = CORNER_POSITIONS[active_corner][1] + oy
+        for i, (ox, oy) in enumerate(const.ORIENTATION_OFFSETS[active_corner]):
+            orientation_x = const.CORNER_POSITIONS[active_corner][0] + ox
+            orientation_y = const.CORNER_POSITIONS[active_corner][1] + oy
             if grid_x == orientation_x and grid_y == orientation_y:
                 active_orientation = (active_corner, i)
-                orientation_offset = ORIENTATIONS[active_corner][i]
+                orientation_offset = const.ORIENTATIONS[active_corner][i]
                 print(f"Selected orientation: {robot_theta} radians")
                 selection_complete = True  # Mark selection as complete
                 return
@@ -418,41 +377,45 @@ def draw_tables(
     surface_table.fill((255, 255, 255))  # White background
     buried_table_surface.fill((255, 255, 255))  # White background
     pygame.draw.rect(
-        surface_table, (0, 0, 0), (0, 0, TABLE_WIDTH, TABLE_HEIGHT), 2
+        surface_table, (0, 0, 0), (0, 0, const.TABLE_WIDTH, const.TABLE_HEIGHT), 2
     )  # Border for surface table
     pygame.draw.rect(
-        buried_table_surface, (0, 0, 0), (0, 0, TABLE_WIDTH, TABLE_HEIGHT), 2
+        buried_table_surface,
+        (0, 0, 0),
+        (0, 0, const.TABLE_WIDTH, const.TABLE_HEIGHT),
+        2,
     )  # Border for buried table
 
-    y_offset = TABLE_PADDING
-    for y in range(MAP_HEIGHT):
-        for x in range(MAP_WIDTH):
-            if map_data[y][x] == 1:  # Surface mines
+    y_offset = const.TABLE_PADDING
+    for y in range(const.MAP_HEIGHT):
+        for x in range(const.MAP_WIDTH):
+            if map_data[y][x] == MINE_TYPE.SURFACE:
                 mine_type = "Surface"
-                text = font.render(
+                text = FONT.render(
                     f"{chr(65 + x)},{y + 1}: {mine_type}", True, (0, 0, 0)
                 )  # Convert index to char
-                surface_table.blit(text, (TABLE_PADDING, y_offset))
-                y_offset += FONT_SIZE + 2
-                if y_offset > TABLE_HEIGHT - FONT_SIZE:
+                surface_table.blit(text, (const.TABLE_PADDING, y_offset))
+                y_offset += const.FONT_SIZE + 2
+                if y_offset > const.TABLE_HEIGHT - const.FONT_SIZE:
                     return
-    y_offset = TABLE_PADDING
-    for y in range(MAP_HEIGHT):
-        for x in range(MAP_WIDTH):
-            if map_data[y][x] == 2:  # Buried mines
+    y_offset = const.TABLE_PADDING
+    for y in range(const.MAP_HEIGHT):
+        for x in range(const.MAP_WIDTH):
+            if map_data[y][x] == MINE_TYPE.BURIED:
                 mine_type = "Buried"
-                text = font.render(
+                text = FONT.render(
                     f"{chr(65 + x)},{y + 1}: {mine_type}", True, (0, 0, 0)
                 )  # Convert index to char
-                buried_table_surface.blit(text, (TABLE_PADDING, y_offset))
-                y_offset += FONT_SIZE + 2
-                if y_offset > TABLE_HEIGHT - FONT_SIZE:
+                buried_table_surface.blit(text, (const.TABLE_PADDING, y_offset))
+                y_offset += const.FONT_SIZE + 2
+                if y_offset > const.TABLE_HEIGHT - const.FONT_SIZE:
                     return
 
 
 # Function to save the map as a screenshot
 def save_map_screenshot(
-    directory: str = "/home/ahmed/Map_Screenshots",
+    directory: str,
+    screen: pygame.Surface,
 ) -> None:
     try:
         os.makedirs(directory, exist_ok=True)
@@ -470,6 +433,18 @@ def save_map_screenshot(
 
 
 def main() -> int:
+    # Create the display
+    screen = pygame.display.set_mode(
+        (
+            const.MAP_WIDTH * const.TILE_SIZE
+            + 2 * (const.TABLE_WIDTH + const.TABLE_SPACING),
+            const.MAP_HEIGHT * const.TILE_SIZE,
+        )
+    )
+    # Create the table surfaces
+    surface_table_surface = pygame.Surface((const.TABLE_WIDTH, const.TABLE_HEIGHT))
+    buried_table_surface = pygame.Surface((const.TABLE_WIDTH, const.TABLE_HEIGHT))
+
     # Initialize ROS node
     rospy.init_node("minefield_map", anonymous=False)
     rospy.Subscriber("pose_combined", Pose2D, robot_pose_callback)
@@ -497,15 +472,24 @@ def main() -> int:
 
         # Draw the tables
         draw_tables(surface_table_surface, buried_table_surface)
-        screen.blit(surface_table_surface, (MAP_WIDTH * TILE_SIZE + TABLE_SPACING, 0))
+        screen.blit(
+            surface_table_surface,
+            (const.MAP_WIDTH * const.TILE_SIZE + const.TABLE_SPACING, 0),
+        )
         screen.blit(
             buried_table_surface,
-            (MAP_WIDTH * TILE_SIZE + TABLE_SPACING + TABLE_WIDTH + TABLE_SPACING, 0),
+            (
+                const.MAP_WIDTH * const.TILE_SIZE
+                + const.TABLE_SPACING
+                + const.TABLE_WIDTH
+                + const.TABLE_SPACING,
+                0,
+            ),
         )
 
         pygame.display.flip()
         rate.sleep()
-    save_map_screenshot()
+    save_map_screenshot("/home/ahmed/Map_Screenshots", screen)
     pygame.quit()
     return 0
 

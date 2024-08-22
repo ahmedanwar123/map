@@ -3,3 +3,6 @@
 /build
 /include
 /package.xml
+
+#python stuff
+__pycache__
