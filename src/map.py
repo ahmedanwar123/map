@@ -21,6 +21,7 @@ import rospy
 from geometry_msgs.msg import Pose2D
 from std_msgs.msg import Bool
 import math
+from utils import calculate_mine_position
 import const
 from const import MINE_TYPE
 
@@ -49,21 +50,6 @@ metal_detected: "bool | None" = None
 active_corner = None
 active_orientation = None
 selection_complete: bool = False  # New variable to track if selection is complete
-
-
-# Function to calculate mine position based on robot's position and orientation
-def calculate_mine_position(rel_x: int, rel_y: int, theta: float) -> "tuple[int, int]":
-    theta_rad = math.radians(theta)
-
-    # Calculate absolute mine position based on robot's position and orientation
-    abs_x = robot_x + rel_x * math.cos(theta_rad) - rel_y * math.sin(theta_rad)
-    abs_y = robot_y + rel_x * math.sin(theta_rad) + rel_y * math.cos(theta_rad)
-
-    # Convert to grid coordinates (assuming the robot's coordinates are also in grid units)
-    grid_x = int(round(abs_x))
-    grid_y = int(round(abs_y))
-
-    return grid_x, grid_y
 
 
 # ROS callback for robot position and orientation
@@ -147,8 +133,9 @@ def mine_detection_callback() -> None:
     if first_detection:
         # Handle the glitch for the first detection by writing "no mine"
         rel_x, rel_y = 1, 0  # Assume the glitch happens 1 unit in front
-        glitch_x, glitch_y = calculate_mine_position(rel_x, rel_y, robot_theta)
-
+        glitch_x, glitch_y = calculate_mine_position(
+            rel_x, rel_y, robot_theta, robot_x, robot_y
+        )
         if 0 <= glitch_x < const.MAP_WIDTH and 0 <= glitch_y < const.MAP_HEIGHT:
             map_data[glitch_y][glitch_x] = MINE_TYPE.NO_MINE
 
@@ -159,7 +146,9 @@ def mine_detection_callback() -> None:
     if mine_type != "no mine":
         # Assuming the mine is always 1 unit in front of the robot
         rel_x, rel_y = 1, 0  # Relative position of the mine (1 unit in front)
-        mine_x, mine_y = calculate_mine_position(rel_x, rel_y, robot_theta)
+        mine_x, mine_y = calculate_mine_position(
+            rel_x, rel_y, robot_theta, robot_x, robot_y
+        )
 
         if 0 <= mine_x < const.MAP_WIDTH and 0 <= mine_y < const.MAP_HEIGHT:
             if mine_type == "surface":
