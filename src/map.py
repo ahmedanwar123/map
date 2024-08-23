@@ -62,38 +62,20 @@ class RobotCoordinates:
             if orientation_offset is not None:
                 self.theta = (
                     data.theta + orientation_offset
-                )  # The theta value is already in radians
-                if active_corner == CornerPosition.BOTTOM_LEFT:
-                    if orientation_offset == 0:
-                        self.x = data.x
-                        self.y = data.y
-                    elif orientation_offset == 90:
-                        self.x = data.y
-                        self.y = data.x
-                elif active_corner == CornerPosition.BOTTOM_RIGHT:
-                    if orientation_offset == 90:
-                        self.x = const.MAP_WIDTH - data.y - 1
-                        self.y = data.x
-                    elif orientation_offset == 180:
-                        self.x = const.MAP_WIDTH - data.x - 1
-                        self.y = data.y
-                elif active_corner == CornerPosition.TOP_LEFT:
-                    if orientation_offset == 0:
-                        self.x = data.x
-                        self.y = const.MAP_HEIGHT - data.y - 1
-                    elif orientation_offset == -90:
-                        self.x = data.y
-                        self.y = const.MAP_HEIGHT - data.x - 1
-                elif active_corner == CornerPosition.TOP_RIGHT:
-                    if orientation_offset == 180:
-                        self.x = const.MAP_WIDTH - data.x - 1
-                        self.y = const.MAP_HEIGHT - data.y - 1
-                    elif orientation_offset == -90:
-                        self.x = const.MAP_HEIGHT - data.y - 1
-                        self.y = const.MAP_HEIGHT - data.x - 1
-                else:
-                    rospy.loginfo("orientation_offset is not received")
-
+                )  # The theta value is already in
+                # change of coordinates for the robot's orientation using rotation
+                offset_angle_rad = math.radians(orientation_offset)
+                self.x = data.x * math.cos(offset_angle_rad) + data.y * math.sin(
+                    offset_angle_rad
+                )
+                self.y = -data.x * math.sin(offset_angle_rad) + data.y * math.cos(
+                    offset_angle_rad
+                )
+                # translation
+                assert active_corner is not None
+                reference_x, reference_y = const.CORNER_POSITIONS[active_corner]
+                self.x += reference_x
+                self.y += reference_y
             rospy.loginfo(
                 f"Robot position: ({self.x}, {self.y}), Orientation: {self.theta:.2f} Degrees"
             )
@@ -257,6 +239,8 @@ def draw_corner_orientation_cells(screen: pygame.Surface) -> None:
         for i, (ox, oy) in enumerate(const.ORIENTATION_OFFSETS[active_corner]):
             orientation_x = corner_x + ox
             orientation_y = corner_y + oy
+            assert 0 <= orientation_x < const.MAP_WIDTH
+            assert 0 <= orientation_y < const.MAP_HEIGHT
             if (
                 0 <= orientation_x < const.MAP_WIDTH
                 and 0 <= orientation_y < const.MAP_HEIGHT
