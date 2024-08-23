@@ -210,24 +210,28 @@ def draw_map(screen: pygame.Surface) -> None:
     # pygame.draw.circle(screen, (0, 0, 255), (robot_screen_x + TILE_SIZE // 2, robot_screen_y + TILE_SIZE // 2), TILE_SIZE // 4)  # Blue circle with radius half of TILE_SIZE
 
     # Draw the arrow to indicate the robot's orientation
-    arrow_length = (const.TILE_SIZE // 2) + 20
-    arrow_x = (
-        robot_screen_x
-        + const.TILE_SIZE // 2
-        + arrow_length * math.cos(math.radians(robot_coordinates.theta))
-    )
-    arrow_y = (
-        robot_screen_y
-        + const.TILE_SIZE // 2
-        - arrow_length * math.sin(math.radians(robot_coordinates.theta))
-    )
-    pygame.draw.line(
-        screen,
-        (255, 0, 0),
-        (robot_screen_x + const.TILE_SIZE // 2, robot_screen_y + const.TILE_SIZE // 2),
-        (arrow_x, arrow_y),
-        12,
-    )
+    if selection_complete:
+        arrow_length = (const.TILE_SIZE // 2) + 20
+        arrow_x = (
+            robot_screen_x
+            + const.TILE_SIZE // 2
+            + arrow_length * math.cos(math.radians(robot_coordinates.theta))
+        )
+        arrow_y = (
+            robot_screen_y
+            + const.TILE_SIZE // 2
+            - arrow_length * math.sin(math.radians(robot_coordinates.theta))
+        )
+        pygame.draw.line(
+            screen,
+            (255, 0, 0),
+            (
+                robot_screen_x + const.TILE_SIZE // 2,
+                robot_screen_y + const.TILE_SIZE // 2,
+            ),
+            (arrow_x, arrow_y),
+            12,
+        )
 
 
 # Function to draw the corner and orientation cells
@@ -325,7 +329,8 @@ def handle_mouse_click(pos: "tuple[int, int]") -> None:
         for corner, (cx, cy) in const.CORNER_POSITIONS.items():
             if grid_x == cx and grid_y == cy:
                 active_corner = corner
-                active_orientation = None  # Reset active orientation
+                robot_coordinates.x = grid_x
+                robot_coordinates.y = grid_y
                 print(f"Selected corner: {corner}")
                 return
 
@@ -337,7 +342,7 @@ def handle_mouse_click(pos: "tuple[int, int]") -> None:
             if grid_x == orientation_x and grid_y == orientation_y:
                 active_orientation = (active_corner, i)
                 orientation_offset = const.ORIENTATIONS[active_corner][i]
-                print(f"Selected orientation: {robot_coordinates.theta} radians")
+                print(f"Selected orientation: {robot_coordinates.theta} degrees")
                 selection_complete = True  # Mark selection as complete
                 return
 
