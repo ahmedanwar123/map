@@ -21,9 +21,10 @@ import rospy
 from geometry_msgs.msg import Pose2D
 from std_msgs.msg import Bool
 import math
+from dataclasses import dataclass
 from utils import calculate_mine_position
 import const
-from const import MINE_TYPE
+from const import MineType, CornerPosition
 
 # Initialize Pygame
 pygame.init()
@@ -33,71 +34,74 @@ pygame.display.set_caption("Minefield Map")
 FONT = pygame.font.Font(None, const.FONT_SIZE)
 
 orientation_offset: "float | None" = None
-pose_x_offset: "float | None" = None
-pose_y_offset: "float | None" = None
 
 # Define the initial map (0 for empty space, 1 for surface mine, 2 for buried mine)
-map_data = [[MINE_TYPE.NO_MINE] * const.MAP_WIDTH for _ in range(const.MAP_HEIGHT)]
+map_data = [[MineType.NO_MINE] * const.MAP_WIDTH for _ in range(const.MAP_HEIGHT)]
 first_detection: bool = True
 
 # Robot's current position and orientation
-robot_x, robot_y, robot_theta = 0, 0, 0  # Initialize with default values
 camera_detected: "bool | None" = None
 metal_detected: "bool | None" = None
 
 
 # Active corner and orientation
-active_corner = None
+active_corner: "CornerPosition | None" = None
 active_orientation = None
 selection_complete: bool = False  # New variable to track if selection is complete
 
 
-# ROS callback for robot position and orientation
-def robot_pose_callback(data: Pose2D) -> None:
-    global robot_x, robot_y, robot_theta
-    try:
-        if orientation_offset is not None:
-            robot_theta = (
-                data.theta + orientation_offset
-            )  # The theta value is already in radians
-            if (pose_x_offset, pose_y_offset) == const.CORNER_POSITIONS["Bottom-left"]:
-                if orientation_offset == 0:
-                    robot_x = data.x
-                    robot_y = data.y
-                elif orientation_offset == 90:
-                    robot_x = data.y
-                    robot_y = data.x
-            elif (pose_x_offset, pose_y_offset) == const.CORNER_POSITIONS[
-                "Bottom-right"
-            ]:
-                if orientation_offset == 90:
-                    robot_x = const.MAP_WIDTH - data.y - 1
-                    robot_y = data.x
-                elif orientation_offset == 180:
-                    robot_x = const.MAP_WIDTH - data.x - 1
-                    robot_y = data.y
-            elif (pose_x_offset, pose_y_offset) == const.CORNER_POSITIONS["Top-left"]:
-                if orientation_offset == 0:
-                    robot_x = data.x
-                    robot_y = const.MAP_HEIGHT - data.y - 1
-                elif orientation_offset == -90:
-                    robot_x = data.y
-                    robot_y = const.MAP_HEIGHT - data.x - 1
-            elif (pose_x_offset, pose_y_offset) == const.CORNER_POSITIONS["Top-right"]:
-                if orientation_offset == 180:
-                    robot_x = const.MAP_WIDTH - data.x - 1
-                    robot_y = const.MAP_HEIGHT - data.y - 1
-                elif orientation_offset == -90:
-                    robot_x = const.MAP_HEIGHT - data.y - 1
-                    robot_y = const.MAP_HEIGHT - data.x - 1
-            else:
-                rospy.loginfo("orientation_offset is not received")
+@dataclass
+class RobotCoordinates:
+    x: float = 0
+    y: float = 0
+    theta: float = 0
 
-        rospy.loginfo(
-            f"Robot position: ({robot_x}, {robot_y}), Orientation: {robot_theta:.2f} Degrees"
-        )
-    except Exception as e:
-        rospy.logerr(f"Exception in robot_pose_callback: {e}")
+    # ROS callback for robot position and orientation
+    def robot_pose_callback(self, data: Pose2D) -> None:
+        try:
+            if orientation_offset is not None:
+                self.theta = (
+                    data.theta + orientation_offset
+                )  # The theta value is already in radians
+                if active_corner == CornerPosition.BOTTOM_LEFT:
+                    if orientation_offset == 0:
+                        self.x = data.x
+                        self.y = data.y
+                    elif orientation_offset == 90:
+                        self.x = data.y
+                        self.y = data.x
+                elif active_corner == CornerPosition.BOTTOM_RIGHT:
+                    if orientation_offset == 90:
+                        self.x = const.MAP_WIDTH - data.y - 1
+                        self.y = data.x
+                    elif orientation_offset == 180:
+                        self.x = const.MAP_WIDTH - data.x - 1
+                        self.y = data.y
+                elif active_corner == CornerPosition.TOP_LEFT:
+                    if orientation_offset == 0:
+                        self.x = data.x
+                        self.y = const.MAP_HEIGHT - data.y - 1
+                    elif orientation_offset == -90:
+                        self.x = data.y
+                        self.y = const.MAP_HEIGHT - data.x - 1
+                elif active_corner == CornerPosition.TOP_RIGHT:
+                    if orientation_offset == 180:
+                        self.x = const.MAP_WIDTH - data.x - 1
+                        self.y = const.MAP_HEIGHT - data.y - 1
+                    elif orientation_offset == -90:
+                        self.x = const.MAP_HEIGHT - data.y - 1
+                        self.y = const.MAP_HEIGHT - data.x - 1
+                else:
+                    rospy.loginfo("orientation_offset is not received")
+
+            rospy.loginfo(
+                f"Robot position: ({self.x}, {self.y}), Orientation: {self.theta:.2f} Degrees"
+            )
+        except Exception as e:
+            rospy.logerr(f"Exception in robot_pose_callback: {e}")
+
+
+robot_coordinates = RobotCoordinates()
 
 
 # ROS callback for camera detection (Bool)
@@ -119,42 +123,35 @@ def metal_detector_callback(data: Bool) -> None:
 
 
 def mine_detection_callback() -> None:
-    global camera_detected, metal_detected, first_detection, map_data
+    global first_detection, map_data
 
     if not selection_complete:
         rospy.loginfo("Selection of corner and orientation not complete.")
         return
 
     if metal_detected:
-        mine_type = "surface" if camera_detected else "buried"
+        mine_type = MineType.SURFACE if camera_detected else MineType.BURIED
     else:
-        mine_type = "no mine"
+        mine_type = MineType.NO_MINE
 
     if first_detection:
         # Handle the glitch for the first detection by writing "no mine"
         rel_x, rel_y = 1, 0  # Assume the glitch happens 1 unit in front
-        glitch_x, glitch_y = calculate_mine_position(
-            rel_x, rel_y, robot_theta, robot_x, robot_y
-        )
+        glitch_x, glitch_y = calculate_mine_position(rel_x, rel_y, robot_coordinates)
         if 0 <= glitch_x < const.MAP_WIDTH and 0 <= glitch_y < const.MAP_HEIGHT:
-            map_data[glitch_y][glitch_x] = MINE_TYPE.NO_MINE
+            map_data[glitch_y][glitch_x] = MineType.NO_MINE
 
         first_detection = False  # Disable the glitch after it occurs once
         rospy.loginfo("Handled the first detection glitch.")
         return
 
-    if mine_type != "no mine":
+    if mine_type != MineType.NO_MINE:
         # Assuming the mine is always 1 unit in front of the robot
         rel_x, rel_y = 1, 0  # Relative position of the mine (1 unit in front)
-        mine_x, mine_y = calculate_mine_position(
-            rel_x, rel_y, robot_theta, robot_x, robot_y
-        )
+        mine_x, mine_y = calculate_mine_position(rel_x, rel_y, robot_coordinates)
 
         if 0 <= mine_x < const.MAP_WIDTH and 0 <= mine_y < const.MAP_HEIGHT:
-            if mine_type == "surface":
-                map_data[mine_y][mine_x] = MINE_TYPE.SURFACE
-            elif mine_type == "buried":
-                map_data[mine_y][mine_x] = MINE_TYPE.BURIED
+            map_data[mine_y][mine_x] = mine_type
         else:
             rospy.logwarn(f"Mine position out of bounds: ({mine_x}, {mine_y})")
     else:
@@ -164,12 +161,12 @@ def mine_detection_callback() -> None:
 def draw_map(screen: pygame.Surface) -> None:
     for y, row in enumerate(map_data):
         for x, tile in enumerate(row):
-            if tile == MINE_TYPE.SURFACE:
+            if tile == MineType.SURFACE:
                 screen.blit(
                     const.SURFACE_MINE_IMG,
                     (x * const.TILE_SIZE, (const.MAP_HEIGHT - y - 1) * const.TILE_SIZE),
                 )
-            elif tile == MINE_TYPE.BURIED:
+            elif tile == MineType.BURIED:
                 screen.blit(
                     const.BURIED_MINE_IMG,
                     (x * const.TILE_SIZE, (const.MAP_HEIGHT - y - 1) * const.TILE_SIZE),
@@ -199,9 +196,9 @@ def draw_map(screen: pygame.Surface) -> None:
                 ),
             )
     # Calculate robot image position
-    robot_screen_x = int(robot_x * const.TILE_SIZE)
+    robot_screen_x = int(robot_coordinates.x * const.TILE_SIZE)
     robot_screen_y = int(
-        (const.MAP_HEIGHT - robot_y - 1) * const.TILE_SIZE
+        (const.MAP_HEIGHT - robot_coordinates.y - 1) * const.TILE_SIZE
     )  # Convert map coordinates to screen coordinates
 
     # Draw the robot image
@@ -217,12 +214,12 @@ def draw_map(screen: pygame.Surface) -> None:
     arrow_x = (
         robot_screen_x
         + const.TILE_SIZE // 2
-        + arrow_length * math.cos(math.radians(robot_theta))
+        + arrow_length * math.cos(math.radians(robot_coordinates.theta))
     )
     arrow_y = (
         robot_screen_y
         + const.TILE_SIZE // 2
-        - arrow_length * math.sin(math.radians(robot_theta))
+        - arrow_length * math.sin(math.radians(robot_coordinates.theta))
     )
     pygame.draw.line(
         screen,
@@ -234,15 +231,11 @@ def draw_map(screen: pygame.Surface) -> None:
 
 
 # Function to draw the corner and orientation cells
-
-
 def draw_corner_orientation_cells(screen: pygame.Surface) -> None:
-    global active_corner, active_orientation, selection_complete
-
     if selection_complete:
         return  # No drawing if selection is complete
 
-    if active_corner:
+    if active_corner is not None:
         # Draw only the active corner cell
         corner_x, corner_y = const.CORNER_POSITIONS[active_corner]
         pygame.draw.rect(
@@ -281,7 +274,7 @@ def draw_corner_orientation_cells(screen: pygame.Surface) -> None:
                 )
 
     # When a corner and orientation are selected, do not draw any corners or ORIENTATIONS
-    elif not active_corner:
+    else:
         # Draw all corners initially
         for corner, (cx, cy) in const.CORNER_POSITIONS.items():
             pygame.draw.rect(
@@ -318,16 +311,7 @@ def draw_corner_orientation_cells(screen: pygame.Surface) -> None:
 
 # Function to handle mouse click events
 def handle_mouse_click(pos: "tuple[int, int]") -> None:
-    global \
-        robot_x, \
-        robot_y, \
-        robot_theta, \
-        active_corner, \
-        active_orientation, \
-        selection_complete, \
-        orientation_offset, \
-        pose_x_offset, \
-        pose_y_offset
+    global active_corner, active_orientation, selection_complete, orientation_offset
 
     if selection_complete:
         return  # Ignore clicks if selection is complete
@@ -337,13 +321,13 @@ def handle_mouse_click(pos: "tuple[int, int]") -> None:
     grid_y = const.MAP_HEIGHT - 1 - mouse_y // const.TILE_SIZE
 
     # Check if the click is on a corner cell
-    for corner, (cx, cy) in const.CORNER_POSITIONS.items():
-        if grid_x == cx and grid_y == cy and active_corner is None:
-            active_corner = corner
-            pose_x_offset, pose_y_offset = cx, cy
-            active_orientation = None  # Reset active orientation
-            print(f"Selected corner: {corner}")
-            return
+    if active_corner is None:
+        for corner, (cx, cy) in const.CORNER_POSITIONS.items():
+            if grid_x == cx and grid_y == cy:
+                active_corner = corner
+                active_orientation = None  # Reset active orientation
+                print(f"Selected corner: {corner}")
+                return
 
     # Check if the click is on an orientation cell
     if active_corner:
@@ -353,7 +337,7 @@ def handle_mouse_click(pos: "tuple[int, int]") -> None:
             if grid_x == orientation_x and grid_y == orientation_y:
                 active_orientation = (active_corner, i)
                 orientation_offset = const.ORIENTATIONS[active_corner][i]
-                print(f"Selected orientation: {robot_theta} radians")
+                print(f"Selected orientation: {robot_coordinates.theta} radians")
                 selection_complete = True  # Mark selection as complete
                 return
 
@@ -378,10 +362,9 @@ def draw_tables(
     y_offset = const.TABLE_PADDING
     for y in range(const.MAP_HEIGHT):
         for x in range(const.MAP_WIDTH):
-            if map_data[y][x] == MINE_TYPE.SURFACE:
-                mine_type = "Surface"
+            if map_data[y][x] == MineType.SURFACE:
                 text = FONT.render(
-                    f"{chr(65 + x)},{y + 1}: {mine_type}", True, (0, 0, 0)
+                    f"{chr(65 + x)},{y + 1}: Surface", True, (0, 0, 0)
                 )  # Convert index to char
                 surface_table.blit(text, (const.TABLE_PADDING, y_offset))
                 y_offset += const.FONT_SIZE + 2
@@ -390,10 +373,9 @@ def draw_tables(
     y_offset = const.TABLE_PADDING
     for y in range(const.MAP_HEIGHT):
         for x in range(const.MAP_WIDTH):
-            if map_data[y][x] == MINE_TYPE.BURIED:
-                mine_type = "Buried"
+            if map_data[y][x] == MineType.BURIED:
                 text = FONT.render(
-                    f"{chr(65 + x)},{y + 1}: {mine_type}", True, (0, 0, 0)
+                    f"{chr(65 + x)},{y + 1}: Buried", True, (0, 0, 0)
                 )  # Convert index to char
                 buried_table_surface.blit(text, (const.TABLE_PADDING, y_offset))
                 y_offset += const.FONT_SIZE + 2
@@ -436,7 +418,7 @@ def main() -> int:
 
     # Initialize ROS node
     rospy.init_node("minefield_map", anonymous=False)
-    rospy.Subscriber("pose_combined", Pose2D, robot_pose_callback)
+    rospy.Subscriber("pose_combined", Pose2D, robot_coordinates.robot_pose_callback)
     rospy.Subscriber("camera_detection", Bool, camera_detection_callback)
     rospy.Subscriber("detection", Bool, metal_detector_callback)
 
