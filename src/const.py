@@ -1,11 +1,18 @@
 import pygame
-from enum import Enum
+from enum import Enum, auto
 
 
-class MINE_TYPE(Enum):
+class MineType(Enum):
     NO_MINE = 0
     SURFACE = 1
     BURIED = 2
+
+
+class CornerPosition(Enum):
+    BOTTOM_LEFT = auto()
+    BOTTOM_RIGHT = auto()
+    TOP_LEFT = auto()
+    TOP_RIGHT = auto()
 
 
 TILE_SIZE = 70  # Size of each tile in pixels
@@ -42,23 +49,23 @@ TEXT_COLOR = (255, 255, 255)
 
 # Corner and orientation positions (in grid coordinates)
 CORNER_POSITIONS = {
-    "Bottom-left": (0, 0),
-    "Bottom-right": (MAP_WIDTH - 1, 0),
-    "Top-left": (0, MAP_HEIGHT - 1),
-    "Top-right": (MAP_WIDTH - 1, MAP_HEIGHT - 1),
+    CornerPosition.BOTTOM_LEFT: (0, 0),
+    CornerPosition.BOTTOM_RIGHT: (MAP_WIDTH - 1, 0),
+    CornerPosition.TOP_LEFT: (0, MAP_HEIGHT - 1),
+    CornerPosition.TOP_RIGHT: (MAP_WIDTH - 1, MAP_HEIGHT - 1),
 }
 
 # Orientation cells relative to corner positions (adjacent cells)
 ORIENTATION_OFFSETS = {
-    "Bottom-left": [(1, 0), (0, 1)],  # Right and above
-    "Bottom-right": [(0, 1), (-1, 0)],  # Left and above
-    "Top-left": [(1, 0), (0, -1)],  # Right and below
-    "Top-right": [(0, -1), (-1, 0)],  # Left and below
+    CornerPosition.BOTTOM_LEFT: ((1, 0), (0, 1)),  # Right and above
+    CornerPosition.BOTTOM_RIGHT: ((0, 1), (-1, 0)),  # Left and above
+    CornerPosition.TOP_LEFT: ((1, 0), (0, -1)),  # Right and below
+    CornerPosition.TOP_RIGHT: ((0, -1), (-1, 0)),  # Left and below
 }
 # Orientation directions (relative to the corner cells)
 ORIENTATIONS = {
-    "Bottom-left": [0, 90],
-    "Bottom-right": [90, 180],
-    "Top-left": [0, -90],
-    "Top-right": [-90, 180],
+    CornerPosition.BOTTOM_LEFT: (0, 90),
+    CornerPosition.BOTTOM_RIGHT: (90, 180),
+    CornerPosition.TOP_LEFT: (0, -90),
+    CornerPosition.TOP_RIGHT: (-90, 180),
 }
