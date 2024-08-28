@@ -65,10 +65,10 @@ class RobotCoordinates:
                 )  # The theta value is already in
                 # change of coordinates for the robot's orientation using rotation
                 offset_angle_rad = math.radians(orientation_offset)
-                self.x = data.x * math.cos(offset_angle_rad) + data.y * math.sin(
+                self.x = data.x * math.cos(offset_angle_rad) - data.y * math.sin(
                     offset_angle_rad
                 )
-                self.y = -data.x * math.sin(offset_angle_rad) + data.y * math.cos(
+                self.y = data.x * math.sin(offset_angle_rad) + data.y * math.cos(
                     offset_angle_rad
                 )
                 # translation
@@ -323,6 +323,7 @@ def handle_mouse_click(pos: "tuple[int, int]") -> None:
             if grid_x == orientation_x and grid_y == orientation_y:
                 active_orientation = (active_corner, i)
                 orientation_offset = const.ORIENTATIONS[active_corner][i]
+                robot_coordinates.theta = const.ORIENTATIONS[active_corner][i]
                 print(f"Selected orientation: {robot_coordinates.theta} degrees")
                 selection_complete = True  # Mark selection as complete
                 return
